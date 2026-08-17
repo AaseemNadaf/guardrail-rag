@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+*.db
+.venv/
+venv/
+.pytest_cache/
+.streamlit/
+data/mock_docs/*
+!data/mock_docs/.gitkeep

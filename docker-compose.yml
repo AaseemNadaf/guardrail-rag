@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: guardrail-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: guardrail-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # NOTE: IdeaPad Slim 5i team member has no dedicated GPU.
+    # Either skip running this service locally and instead set
+    # OLLAMA_BASE_URL in .env to the reference machine's IP
+    # (or a Colab/ngrok tunnel), or run this service anyway for
+    # non-generation dev work (Qdrant/Presidio/FastAPI logic
+    # doesn't need the GPU at all).
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: guardrail-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - qdrant
+    volumes:
+      - ./app:/code/app
+      - ./data:/code/data
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: guardrail-ui
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    depends_on:
+      - api
+    volumes:
+      - ./streamlit_app:/code/streamlit_app
+
+volumes:
+  qdrant_data:
+  ollama_data:
