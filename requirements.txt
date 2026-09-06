@@ -14,6 +14,12 @@ qdrant-client==1.19.0
 # --- Auth ---
 python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+# NOTE: bcrypt is pinned below passlib's compatibility ceiling. Newer
+# bcrypt releases (4.1+) removed an internal attribute passlib's
+# version-detection relies on, causing "password cannot be longer than
+# 72 bytes" errors even on short passwords. Don't upgrade bcrypt alone
+# without checking passlib compatibility first.
 
 # --- PII redaction ---
 presidio-analyzer==2.2.364

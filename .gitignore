@@ -7,4 +7,5 @@ venv/
 .pytest_cache/
 .streamlit/
 data/mock_docs/*
-!data/mock_docs/.gitkeep
+!data/mock_docs/classifications.json
+!data/mock_docs/*.txt

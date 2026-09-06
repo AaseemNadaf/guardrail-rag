@@ -1,7 +1,3 @@
-"""
-Confirms the scaffold actually runs. This is the test M3 should
-run first to verify the Week 1 setup is correct on their machine.
-"""
 import pytest
 from httpx import AsyncClient, ASGITransport
 

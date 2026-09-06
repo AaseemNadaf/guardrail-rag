@@ -1,7 +1,6 @@
 """
 GuardRail RAG — Streamlit frontend.
-Week 1: placeholder that confirms the API is reachable.
-M4 builds out chat UI, login, and the audit-log viewer here in later sprints.
+Placeholder — the Mac teammate's real chat UI file replaces this once ready.
 """
 import os
 import httpx
@@ -21,4 +20,4 @@ if st.button("Check API connection"):
         st.error(f"Could not reach API at {API_BASE_URL}: {e}")
 
 st.divider()
-st.info("Chat interface, login, and audit log viewer will be built here in Phase 1–2.")
+st.info("Real chat UI pending — Mac teammate's file goes here once received.")
