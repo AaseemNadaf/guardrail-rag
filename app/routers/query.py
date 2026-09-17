@@ -1,19 +1,18 @@
 """
-Layer 1 (pre-retrieval auth + RBAC) and Layer 2 (post-retrieval PII
-redaction) are both live on this endpoint.
+All three guardrail layers are live on this endpoint.
 
-/query requires a valid JWT. The caller's role determines their
-classification clearance (Layer 1), which becomes a Qdrant metadata
-filter - chunks above their clearance are never retrieved. Retrieved
-chunks are then redacted for PII (Layer 2) BEFORE the LLM ever sees
-them, regardless of whether RBAC already scoped them correctly -
-defense in depth, not a single point of failure.
+Layer 1 (pre-retrieval): JWT auth + RBAC. The caller's role determines
+their classification clearance, which becomes a Qdrant metadata filter -
+chunks above their clearance are never retrieved.
 
-Retrieval and generation are done as separate steps (not one
-query_engine.query() call) specifically so redaction can happen in
-between - the LLM only ever sees post-redaction text.
+Layer 2 (post-retrieval): PII redaction on retrieved chunks, BEFORE the
+LLM sees them.
 
-Still missing: Layer 3 (output guardrails).
+Layer 3 (post-generation): empty-context refusal, output PII re-scan,
+and an optional groundedness check.
+
+Retrieval and generation are separate steps (not one query_engine.query()
+call) specifically so Layers 2 and 3 can sit between and after them.
 """
 import logging
 
@@ -26,6 +25,11 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.dependencies import get_current_user
+from app.services.guardrails import (
+    REFUSAL_MESSAGE,
+    apply_output_guardrails,
+    has_context,
+)
 from app.services.ingestion import build_index, get_existing_index
 from app.services.redaction import redact_text
 from app.services.users import get_allowed_classifications
@@ -42,6 +46,8 @@ class QueryResponse(BaseModel):
     answer: str
     source_count: int
     allowed_classifications: list[str]
+    pii_redacted: bool = False
+    grounded: bool | None = None
 
 
 @router.post("/ingest")
@@ -56,7 +62,7 @@ def ingest_documents():
 
 @router.post("/query", response_model=QueryResponse)
 def query(request: QueryRequest, current_user: dict = Depends(get_current_user)):
-    """RBAC-filtered retrieval -> PII redaction -> generation. No output guardrails yet."""
+    """RBAC-filtered retrieval -> PII redaction -> generation -> output guardrails."""
     client = qdrant_client.QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
     collections = [c.name for c in client.get_collections().collections]
     if settings.qdrant_collection_name not in collections:
@@ -73,14 +79,29 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
     retriever = index.as_retriever(similarity_top_k=3, filters=rbac_filter)
     nodes = retriever.retrieve(request.question)
 
+    # Layer 3 (pre-generation gate): with no authorized context, the LLM must
+    # not answer at all - otherwise it answers from its own weights, handing
+    # an unauthorized user a plausible answer that never touched the
+    # knowledge base. That is an access-control bypass, not a UX detail.
+    if not has_context(nodes):
+        logger.info(
+            "Layer 3 refusal — no authorized context for user=%s (clearance=%s)",
+            current_user["username"], allowed,
+        )
+        return QueryResponse(
+            answer=REFUSAL_MESSAGE,
+            source_count=0,
+            allowed_classifications=allowed,
+        )
+
     # Layer 2: redact PII in each retrieved chunk before the LLM sees any of it
     for i, node_with_score in enumerate(nodes):
         original = node_with_score.node.get_content()
         redacted = redact_text(original)
         node_with_score.node.set_content(redacted)
-        # DEBUG: visible via `docker-compose logs api`. Not returned in any
-        # API response - this is a log line, not exposed data. Remove once
-        # redaction is fully trusted and no longer being actively verified.
+        # DEBUG: visible via `docker-compose logs api`, never returned in a
+        # response. Remove or gate behind a DEBUG flag once redaction is
+        # no longer being actively verified.
         logger.info(
             "Layer 2 redaction — node %d/%d (user=%s):\n--- BEFORE ---\n%s\n--- AFTER ---\n%s",
             i + 1, len(nodes), current_user["username"], original, redacted,
@@ -90,8 +111,18 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
     synthesizer = get_response_synthesizer(llm=Settings.llm)
     response = synthesizer.synthesize(request.question, nodes=nodes)
 
-    return QueryResponse(
+    # Layer 3 (post-generation): re-scan output for PII, optionally check grounding
+    result = apply_output_guardrails(
         answer=str(response),
+        nodes=nodes,
+        llm=Settings.llm,
+        check_grounding=settings.enable_groundedness_check,
+    )
+
+    return QueryResponse(
+        answer=result.answer,
         source_count=len(nodes),
         allowed_classifications=allowed,
+        pii_redacted=result.pii_leaked,
+        grounded=result.grounded,
     )
