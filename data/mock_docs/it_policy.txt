@@ -1,0 +1,7 @@
+IT Policy – GuardRail Corp
+
+All employees must use company-approved devices and software for official work. Installation of unauthorized applications is strictly prohibited. Employees are required to keep their systems updated and run regular antivirus scans.
+
+Access to internal systems must be done through the company VPN when working remotely. Sharing of login credentials is not allowed under any circumstances.
+
+For IT support or access-related issues, employees can contact the IT Helpdesk at it.support@guardrailcorp.com or reach out to IT Support Lead Arjun Desai (arjun.desai@guardrailcorp.com).

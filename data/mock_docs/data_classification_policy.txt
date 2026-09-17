@@ -1,0 +1,7 @@
+Data Classification & Handling Policy
+
+Company data is classified as Public, Internal, Confidential, or Restricted. Restricted data (including salary information, personal employee records, and security configurations) must not be shared without explicit authorization.
+
+Access to Restricted data is limited to authorized personnel only. Violations of data handling rules may result in disciplinary action.
+
+For guidance on data classification, contact Information Security Officer Sneha Nair (sneha.nair@guardrailcorp.com), Employee ID: GC-SEC-1021.

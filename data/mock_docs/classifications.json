@@ -1,4 +1,22 @@
 {
+  "attendance_policy.txt": "Internal",
+  "benefits_guide.txt": "Internal",
+  "code_of_conduct.txt": "Public",
+  "communication_guidelines.txt": "Public",
+  "data_classification_policy.txt": "Restricted",
+  "disciplinary_procedure.txt": "Restricted",
+  "eng_onboarding.txt": "Internal",
+  "exit_policy.txt": "Confidential",
+  "expense_reimbursement.txt": "Internal",
+  "incident_response.txt": "Restricted",
+  "it_policy.txt": "Internal",
   "leave_policy.txt": "Internal",
-  "eng_onboarding.txt": "Public"
+  "meeting_norms.txt": "Public",
+  "office_access_policy.txt": "Internal",
+  "performance_review.txt": "Confidential",
+  "promotion_policy.txt": "Confidential",
+  "recruitment_policy.txt": "Confidential",
+  "remote_work_policy.txt": "Internal",
+  "salary_bands.txt": "Confidential",
+  "hr_salary_bands.txt": "Internal"
 }

@@ -1,17 +1,7 @@
-GuardRail Corp — Engineering Onboarding Guide
+Engineering Onboarding Guide
 
-Welcome to the engineering team. Your first week should cover the
-following setup steps: request access to the internal GitLab instance,
-set up your local development environment using the team's Docker
-Compose stack, and complete the mandatory security training module.
+New joiners in the Engineering team are expected to complete the onboarding checklist within the first 10 working days. This includes setting up corporate email, Slack, GitHub access, and completing mandatory security training.
 
-All engineers are expected to follow the internal code review process:
-every merge request requires at least one approval from a senior
-engineer before merging to the main branch.
+Each new joiner will be assigned a buddy for the first month to help with team integration and process familiarity.
 
-The on-call rotation is managed through PagerDuty. New engineers join
-the on-call rotation only after their first 60 days, once they have
-shadowed at least two incidents with a senior engineer.
-
-For questions about internal tooling, post in the #eng-help Slack
-channel rather than emailing individual team members directly.
+For access-related issues during onboarding, contact IT Support at it.support@guardrailcorp.com or reach out to Onboarding Coordinator Vikram Joshi (vikram.joshi@guardrailcorp.com).

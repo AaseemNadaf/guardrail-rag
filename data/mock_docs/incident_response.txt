@@ -1,0 +1,7 @@
+Incident Response Procedure
+
+All security or data incidents must be reported immediately to the Incident Response Team. The team will assess severity and initiate containment steps.
+
+Employees should not attempt to investigate or delete evidence on their own. Detailed logs of the incident response process are maintained for audit purposes.
+
+For escalation, contact Incident Lead Rohan Verma (rohan.verma@guardrailcorp.com, +91-98765-43210) or email security-incident@guardrailcorp.com.
