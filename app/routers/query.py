@@ -8,8 +8,8 @@ chunks above their clearance are never retrieved.
 Layer 2 (post-retrieval): PII redaction on retrieved chunks, BEFORE the
 LLM sees them.
 
-Layer 3 (post-generation): empty-context refusal, output PII re-scan,
-and an optional groundedness check.
+Layer 3 (post-generation): relevance floor + empty-context refusal,
+output PII re-scan, and an optional groundedness check.
 
 Retrieval and generation are separate steps (not one query_engine.query()
 call) specifically so Layers 2 and 3 can sit between and after them.
@@ -19,6 +19,7 @@ import logging
 import qdrant_client
 from fastapi import APIRouter, Depends, HTTPException
 from llama_index.core import Settings
+from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from llama_index.core.vector_stores import MetadataFilter, MetadataFilters, FilterOperator
 from pydantic import BaseModel
@@ -35,7 +36,7 @@ from app.services.redaction import redact_text
 from app.services.users import get_allowed_classifications
 
 router = APIRouter()
-logger = logging.getLogger("guardrail.redaction")
+logger = logging.getLogger("guardrail.query")
 
 
 class QueryRequest(BaseModel):
@@ -62,7 +63,7 @@ def ingest_documents():
 
 @router.post("/query", response_model=QueryResponse)
 def query(request: QueryRequest, current_user: dict = Depends(get_current_user)):
-    """RBAC-filtered retrieval -> PII redaction -> generation -> output guardrails."""
+    """RBAC-filtered retrieval -> relevance floor -> redaction -> generation -> output guardrails."""
     client = qdrant_client.QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
     collections = [c.name for c in client.get_collections().collections]
     if settings.qdrant_collection_name not in collections:
@@ -79,13 +80,42 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
     retriever = index.as_retriever(similarity_top_k=3, filters=rbac_filter)
     nodes = retriever.retrieve(request.question)
 
-    # Layer 3 (pre-generation gate): with no authorized context, the LLM must
-    # not answer at all - otherwise it answers from its own weights, handing
-    # an unauthorized user a plausible answer that never touched the
-    # knowledge base. That is an access-control bypass, not a UX detail.
+    # Log every score BEFORE filtering. This is the data needed to tune
+    # retrieval_similarity_cutoff - guessing a threshold without seeing the
+    # real score distribution for this embedding model is how you end up
+    # with a cutoff that either refuses everything or nothing.
+    logger.info(
+        "Retrieval scores (user=%s, clearance=%s, cutoff=%.2f, q=%r):\n%s",
+        current_user["username"], allowed, settings.retrieval_similarity_cutoff,
+        request.question,
+        "\n".join(
+            f"  score={n.score:.4f} classification={n.node.metadata.get('classification')} "
+            f"file={n.node.metadata.get('file_name')}"
+            for n in nodes
+        ) or "  (no nodes retrieved)",
+    )
+
+    # Relevance floor. Vector search returns nearest neighbours regardless of
+    # how weak the match is, so without this the system always has "context"
+    # and refusal falls to the LLM - the exact LLM-as-gatekeeper pattern this
+    # architecture rejects. Dropping weak matches makes the refusal below a
+    # deterministic control instead.
+    retrieved_count = len(nodes)
+    nodes = SimilarityPostprocessor(
+        similarity_cutoff=settings.retrieval_similarity_cutoff
+    ).postprocess_nodes(nodes)
+    logger.info(
+        "Relevance floor kept %d/%d nodes at cutoff %.2f",
+        len(nodes), retrieved_count, settings.retrieval_similarity_cutoff,
+    )
+
+    # Layer 3 (pre-generation gate): with no authorized, relevant context the
+    # LLM must not answer at all - otherwise it answers from its own weights,
+    # handing the user a plausible answer that never touched the knowledge
+    # base. That is an access-control bypass, not a UX detail.
     if not has_context(nodes):
         logger.info(
-            "Layer 3 refusal — no authorized context for user=%s (clearance=%s)",
+            "Layer 3 refusal — no authorized relevant context for user=%s (clearance=%s)",
             current_user["username"], allowed,
         )
         return QueryResponse(
