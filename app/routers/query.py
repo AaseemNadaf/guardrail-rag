@@ -15,6 +15,8 @@ between - the LLM only ever sees post-redaction text.
 
 Still missing: Layer 3 (output guardrails).
 """
+import logging
+
 import qdrant_client
 from fastapi import APIRouter, Depends, HTTPException
 from llama_index.core import Settings
@@ -29,6 +31,7 @@ from app.services.redaction import redact_text
 from app.services.users import get_allowed_classifications
 
 router = APIRouter()
+logger = logging.getLogger("guardrail.redaction")
 
 
 class QueryRequest(BaseModel):
@@ -71,9 +74,17 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
     nodes = retriever.retrieve(request.question)
 
     # Layer 2: redact PII in each retrieved chunk before the LLM sees any of it
-    for node_with_score in nodes:
-        redacted = redact_text(node_with_score.node.get_content())
+    for i, node_with_score in enumerate(nodes):
+        original = node_with_score.node.get_content()
+        redacted = redact_text(original)
         node_with_score.node.set_content(redacted)
+        # DEBUG: visible via `docker-compose logs api`. Not returned in any
+        # API response - this is a log line, not exposed data. Remove once
+        # redaction is fully trusted and no longer being actively verified.
+        logger.info(
+            "Layer 2 redaction — node %d/%d (user=%s):\n--- BEFORE ---\n%s\n--- AFTER ---\n%s",
+            i + 1, len(nodes), current_user["username"], original, redacted,
+        )
 
     # Generation, using only the redacted nodes
     synthesizer = get_response_synthesizer(llm=Settings.llm)
@@ -84,4 +95,3 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
         source_count=len(nodes),
         allowed_classifications=allowed,
     )
-
