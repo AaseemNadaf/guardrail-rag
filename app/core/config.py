@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # queries get refused; too low and it does nothing. Sweeping this value
     # and measuring the precision/recall tradeoff is a paper-worthy
     # experiment in its own right.
-    retrieval_similarity_cutoff: float = 0.4
+    retrieval_similarity_cutoff: float = 0.56
 
     # Layer 3 guardrails
     # The groundedness check costs a second LLM round-trip, roughly doubling
