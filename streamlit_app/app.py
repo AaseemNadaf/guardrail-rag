@@ -1,40 +1,103 @@
+"""
+GuardRail RAG — Streamlit frontend.
+
+UI design by Atharva. Backend integration (login gate, live /query and /audit
+calls) added on top; the visual layer is his, unchanged.
+"""
 import os
-import time
+from datetime import datetime
 
 import httpx
 import streamlit as st
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
+REQUEST_TIMEOUT = 200  # generation can take 10-30s+; the tunnel adds more
 
 
 st.set_page_config(
     page_title="GuardRail RAG",
     page_icon="🛡️",
-    layout='centered',
+    layout="centered",
     initial_sidebar_state="expanded",
 )
 
 
+def _auth_headers() -> dict:
+    return {"Authorization": f"Bearer {st.session_state.token}"}
+
+
+def _handle_401():
+    """Token expired or invalid — drop back to the login screen."""
+    st.session_state.token = None
+    st.session_state.role = None
+    st.session_state.username = None
+    st.rerun()
+
+
 def get_answer(question: str) -> dict:
-    """Calls the real /query endpoint. Generation can take 10-30+s, so timeout is generous."""
+    """Calls the real /query endpoint."""
     try:
         resp = httpx.post(
             f"{API_BASE_URL}/query",
             json={"question": question},
-            headers={"Authorization": f"Bearer {st.session_state.token}"},
-            timeout=200,
+            headers=_auth_headers(),
+            timeout=REQUEST_TIMEOUT,
         )
         if resp.status_code == 401:
-            # Token expired or invalid - force back to the login screen
-            st.session_state.token = None
-            st.session_state.role = None
-            st.rerun()
+            _handle_401()
         resp.raise_for_status()
         return resp.json()
     except httpx.HTTPStatusError as e:
-        return {"answer": f"Error from API ({e.response.status_code}): {e.response.text}", "source_count": 0}
+        return {
+            "answer": f"The server returned an error ({e.response.status_code}). "
+                      f"If this says no index was found, run POST /ingest once.",
+            "source_count": 0,
+        }
     except httpx.RequestError as e:
-        return {"answer": f"Could not reach the API: {e}", "source_count": 0}
+        return {
+            "answer": f"Could not reach the API at {API_BASE_URL}. If the LLM runs through a "
+                      f"tunnel, check it is still up. ({type(e).__name__})",
+            "source_count": 0,
+        }
+
+
+def get_audit_log(limit: int = 100) -> tuple[list[dict], str | None, str | None]:
+    """
+    Calls GET /audit. Returns (entries, scope, error).
+
+    The backend decides scope, not this UI: admins get every entry, everyone
+    else is forced to their own rows server-side. The scope string is shown to
+    the user so a short log is never mistaken for an empty system.
+    """
+    try:
+        resp = httpx.get(
+            f"{API_BASE_URL}/audit",
+            params={"limit": limit},
+            headers=_auth_headers(),
+            timeout=30,
+        )
+        if resp.status_code == 401:
+            _handle_401()
+        resp.raise_for_status()
+        payload = resp.json()
+        return payload.get("entries", []), payload.get("scope"), None
+    except httpx.HTTPStatusError as e:
+        return [], None, f"Server returned {e.response.status_code}."
+    except httpx.RequestError:
+        return [], None, f"Could not reach the API at {API_BASE_URL}."
+
+
+def format_timestamp(raw: str | None) -> str:
+    """
+    The API returns ISO-8601 (2026-09-14T10:23:01.123456). Render it readably,
+    but never crash the page over a timestamp — fall back to the raw string.
+    """
+    if not raw:
+        return "unknown time"
+    try:
+        return datetime.fromisoformat(raw).strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return raw
 
 
 st.markdown(
@@ -178,6 +241,34 @@ st.markdown(
             font-size: 0.7rem;
             font-weight: 600;
         }
+        .audit-title {
+            margin: 2.2rem 0 0.35rem;
+            color: var(--ink);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2rem;
+            letter-spacing: -0.04em;
+        }
+        .audit-subtitle {
+            margin: 0 0 1.5rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .audit-meta {
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+        .audit-question {
+            margin: 0.35rem 0 1rem;
+            color: var(--ink);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .audit-pii {
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .audit-pii-yes { color: #ffbd73; }
+        .audit-pii-no { color: #8bdacc; }
 
         [data-testid="stChatInput"] {
             padding-bottom: 1.25rem;
@@ -219,24 +310,48 @@ st.markdown(
             .hint-grid { grid-template-columns: 1fr; }
             .hero { padding-top: 2rem; }
         }
+        .audit-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.4rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .audit-badge-refused {
+            border: 1px solid rgba(255, 138, 138, 0.35);
+            background: rgba(255, 138, 138, 0.12);
+            color: #ff9f9f;
+        }
+        .audit-badge-answered {
+            border: 1px solid rgba(98, 216, 195, 0.28);
+            background: rgba(98, 216, 195, 0.1);
+            color: #8bdacc;
+        }
+        .audit-scope {
+            margin: -0.6rem 0 1.2rem;
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 
+# --- login gate -------------------------------------------------------------
+# Must run before the sidebar, which reads st.session_state.role.
+
 if "token" not in st.session_state:
     st.session_state.token = None
     st.session_state.role = None
+    st.session_state.username = None
 
 if not st.session_state.token:
-    st.markdown(
-        '<div class="hero"><h1>Sign in to GuardRail RAG</h1></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="hero"><h1>Sign in to GuardRail RAG</h1></div>', unsafe_allow_html=True)
     with st.form("login_form"):
-        login_col = st.columns([1, 2, 1])[1]
-        with login_col:
+        _, mid, _ = st.columns([1, 2, 1])
+        with mid:
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             submitted = st.form_submit_button("Sign in", use_container_width=True)
@@ -245,32 +360,43 @@ if not st.session_state.token:
             resp = httpx.post(
                 f"{API_BASE_URL}/auth/login",
                 json={"username": username, "password": password},
-                timeout=10,
+                timeout=15,
             )
             if resp.status_code == 200:
                 data = resp.json()
                 st.session_state.token = data["access_token"]
                 st.session_state.role = data["role"]
+                st.session_state.username = username
                 st.rerun()
             else:
                 st.error("Invalid username or password.")
-        except httpx.RequestError as e:
-            st.error(f"Could not reach the API at {API_BASE_URL}: {e}")
+        except httpx.RequestError:
+            st.error(f"Could not reach the API at {API_BASE_URL}.")
     st.stop()
 
+
+# --- sidebar ----------------------------------------------------------------
 
 with st.sidebar:
     st.markdown(
         '<div class="brand"><span class="brand-mark">🛡️</span>GuardRail RAG</div>',
         unsafe_allow_html=True,
     )
-    st.caption(f"Signed in as **{st.session_state.role}**")
+    st.caption(f"Signed in as **{st.session_state.username}** ({st.session_state.role})")
+    selected_view = st.radio(
+        "View",
+        ["Chat", "Audit Log"],
+        index=0,
+        key="selected_view",
+        label_visibility="collapsed",
+    )
+    if st.button("＋  Start a new chat", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
     if st.button("Sign out", use_container_width=True):
         st.session_state.token = None
         st.session_state.role = None
-        st.session_state.messages = []
-        st.rerun()
-    if st.button("＋  Start a new chat", use_container_width=True):
+        st.session_state.username = None
         st.session_state.messages = []
         st.rerun()
     st.markdown('<div class="sidebar-kicker" style="margin-top: 2rem;">Add documents</div>', unsafe_allow_html=True)
@@ -282,6 +408,8 @@ with st.sidebar:
         help="Upload documents to connect them to the knowledge base.",
     )
     if uploaded_files:
+        # No backend endpoint accepts uploads yet — say so rather than implying
+        # the files were indexed.
         st.caption(f"{len(uploaded_files)} document(s) selected — upload isn't wired to the backend yet")
         for uploaded_file in uploaded_files:
             st.markdown(f"📄 {uploaded_file.name}")
@@ -292,74 +420,162 @@ if "messages" not in st.session_state:
 if "pending_question" not in st.session_state:
     st.session_state.pending_question = None
 
-typed_question = st.chat_input("Ask GuardRail about your company documents...")
 
-if (
-    not st.session_state.messages
-    and not st.session_state.pending_question
-    and not typed_question
-):
+# --- audit view -------------------------------------------------------------
+
+if selected_view == "Audit Log":
+    st.markdown('<h1 class="audit-title">Audit Log</h1>', unsafe_allow_html=True)
     st.markdown(
-        """
-        <div class="hero">
-            <h1>What can I help you find?</h1>
-        </div>
-        """,
+        '<p class="audit-subtitle">Review recent questions, access levels, and response safeguards.</p>',
         unsafe_allow_html=True,
     )
-    suggestion_columns = st.columns(3)
-    suggestions = [
-        ("📋  Summarize our remote work policy", "Summarize our remote work policy"),
-        ("🔎  Find the latest onboarding checklist", "Find the latest onboarding checklist"),
-        ("💡  Explain our reimbursement process", "Explain our reimbursement process"),
-    ]
-    selected_question = None
-    for column, (label, prompt) in zip(suggestion_columns, suggestions):
-        with column:
-            st.markdown('<div class="suggestion-button">', unsafe_allow_html=True)
-            if st.button(label, key=f"suggestion_{prompt}", use_container_width=True):
-                st.session_state.pending_question = prompt
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-else:
-    selected_question = None
 
+    audit_entries, scope, error = get_audit_log()
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-        if message["role"] == "assistant" and message.get("source_count"):
-            count = message["source_count"]
-            label = "document" if count == 1 else "documents"
-            st.markdown(
-                f'<div class="source-note">⌁ Sources: {count} {label}</div>',
-                unsafe_allow_html=True,
-            )
-
-
-question = typed_question or selected_question or st.session_state.pending_question
-st.session_state.pending_question = None
-
-if question:
-    st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
-        st.markdown(question)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = get_answer(question)
-        st.markdown(response["answer"])
-        label = "document" if response["source_count"] == 1 else "documents"
+    if error:
+        st.error(f"Could not load the audit log. {error}")
+        audit_entries = []
+    elif scope == "own":
         st.markdown(
-            f'<div class="source-note">⌁ Sources: {response["source_count"]} {label}</div>',
+            '<p class="audit-scope">Showing your own activity. Administrators see all users.</p>',
             unsafe_allow_html=True,
         )
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": response["answer"],
-            "source_count": response["source_count"],
-        }
-    )
+    elif scope == "all":
+        st.markdown(
+            '<p class="audit-scope">Showing activity for all users.</p>',
+            unsafe_allow_html=True,
+        )
 
-st.markdown('<div class="footer-note">GuardRail RAG can make mistakes. Verify important information in the source documents.</div>', unsafe_allow_html=True)
+    search_term = st.text_input("Search by user, role, or question", placeholder="Search audit log")
+    if search_term:
+        query = search_term.casefold()
+        audit_entries = [
+            entry
+            for entry in audit_entries
+            if query in str(entry.get("user", "")).casefold()
+            or query in str(entry.get("role", "")).casefold()
+            or query in str(entry.get("question", "")).casefold()
+        ]
+
+    st.caption(f"{len(audit_entries)} audit entries")
+
+    if not audit_entries and not error:
+        st.info("No activity recorded yet. Ask a question in the Chat view and it will appear here.")
+
+    for entry in audit_entries:
+        with st.container(border=True):
+            refused = bool(entry.get("refused"))
+            badge_class = "audit-badge-refused" if refused else "audit-badge-answered"
+            badge_text = "Refused" if refused else "Answered"
+            st.markdown(
+                f'<div class="audit-meta">{format_timestamp(entry.get("timestamp"))} &nbsp;·&nbsp; '
+                f'{entry.get("user", "unknown")} ({entry.get("role", "unknown")}) &nbsp;·&nbsp; '
+                f'<span class="audit-badge {badge_class}">{badge_text}</span></div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f'<div class="audit-question">{entry.get("question", "")}</div>',
+                unsafe_allow_html=True,
+            )
+            metric_columns = st.columns(4)
+            metric_columns[0].metric("Sources", entry.get("source_count", 0))
+            metric_columns[1].markdown(
+                "**Allowed classifications**<br>"
+                + ", ".join(entry.get("allowed_classifications") or ["—"]),
+                unsafe_allow_html=True,
+            )
+            pii_redacted = bool(entry.get("pii_redacted"))
+            pii_class = "audit-pii-yes" if pii_redacted else "audit-pii-no"
+            pii_label = "Yes" if pii_redacted else "No"
+            metric_columns[2].markdown(
+                f'**PII redacted**<br><span class="audit-pii {pii_class}">{pii_label}</span>',
+                unsafe_allow_html=True,
+            )
+            metric_columns[3].metric(
+                "Response time", f'{float(entry.get("response_time_sec") or 0):.1f} sec'
+            )
+
+            if refused and entry.get("refusal_reason"):
+                st.caption(f"Reason: {entry['refusal_reason'].replace('_', ' ')}")
+            if entry.get("grounded") is not None:
+                st.caption("Groundedness check: " + ("passed" if entry["grounded"] else "FLAGGED"))
+
+
+# --- chat view --------------------------------------------------------------
+
+else:
+    typed_question = st.chat_input("Ask GuardRail about your company documents...")
+
+    if (
+        not st.session_state.messages
+        and not st.session_state.pending_question
+        and not typed_question
+    ):
+        st.markdown(
+            """
+            <div class="hero">
+                <h1>What can I help you find?</h1>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        suggestion_columns = st.columns(3)
+        suggestions = [
+            ("📋  Summarize our remote work policy", "Summarize our remote work policy"),
+            ("🔎  Find the latest onboarding checklist", "Find the latest onboarding checklist"),
+            ("💡  Explain our reimbursement process", "Explain our reimbursement process"),
+        ]
+        selected_question = None
+        for column, (label, prompt) in zip(suggestion_columns, suggestions):
+            with column:
+                st.markdown('<div class="suggestion-button">', unsafe_allow_html=True)
+                if st.button(label, key=f"suggestion_{prompt}", use_container_width=True):
+                    st.session_state.pending_question = prompt
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        selected_question = None
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            if message["role"] == "assistant" and message.get("source_count"):
+                count = message["source_count"]
+                label = "document" if count == 1 else "documents"
+                st.markdown(
+                    f'<div class="source-note">⌁ Sources: {count} {label}</div>',
+                    unsafe_allow_html=True,
+                )
+
+    question = typed_question or selected_question or st.session_state.pending_question
+    st.session_state.pending_question = None
+
+    if question:
+        st.session_state.messages.append({"role": "user", "content": question})
+        with st.chat_message("user"):
+            st.markdown(question)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                response = get_answer(question)
+            st.markdown(response["answer"])
+            source_count = response.get("source_count", 0)
+            if source_count:
+                label = "document" if source_count == 1 else "documents"
+                st.markdown(
+                    f'<div class="source-note">⌁ Sources: {source_count} {label}</div>',
+                    unsafe_allow_html=True,
+                )
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": response["answer"],
+                "source_count": source_count,
+            }
+        )
+
+st.markdown(
+    '<div class="footer-note">GuardRail RAG can make mistakes. Verify important information '
+    'in the source documents.</div>',
+    unsafe_allow_html=True,
+)
