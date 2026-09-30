@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # JWT
+    # No default on purpose - startup should fail loudly if it's unset rather
+    # than silently signing tokens with a predictable key.
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
@@ -24,21 +26,25 @@ class Settings(BaseSettings):
     # Retrieval
     # Vector search returns nearest neighbours, not relevant ones - with no
     # floor, similarity_top_k always returns k documents no matter how poorly
-    # they match. That left refusal up to the LLM ("the context doesn't
-    # mention that"), which is the LLM-as-gatekeeper pattern this whole
-    # architecture exists to avoid. This cutoff drops weak matches so the
-    # Layer 3 empty-context refusal fires deterministically instead.
+    # they match. That left refusal up to the LLM, which is the
+    # LLM-as-gatekeeper pattern this architecture exists to avoid.
     #
-    # NEEDS EMPIRICAL TUNING against the real dataset. Too high and valid
-    # queries get refused; too low and it does nothing. Sweeping this value
-    # and measuring the precision/recall tradeoff is a paper-worthy
-    # experiment in its own right.
+    # 0.56 was fitted to a single query pair with a ~0.003 margin between
+    # relevant and irrelevant clusters. It is NOT a tuned value - collect more
+    # query/role samples before relying on it, and consider a relative
+    # threshold (drop nodes far below the top hit) if the clusters overlap.
     retrieval_similarity_cutoff: float = 0.56
+
+    # Ingestion
+    # Auto-ingest at startup, change-detected via a content hash of the corpus
+    # plus classifications.json - a no-op when nothing changed. Set false to
+    # manage the index purely through POST /ingest.
+    auto_ingest_on_startup: bool = True
 
     # Layer 3 guardrails
     # The groundedness check costs a second LLM round-trip, roughly doubling
-    # /query latency. Default OFF so day-to-day dev stays fast; turn it on
-    # for red-teaming runs and for the paper's latency-overhead measurements.
+    # /query latency. Default OFF so day-to-day dev stays fast; turn it on for
+    # red-teaming runs and for the paper's latency-overhead measurements.
     enable_groundedness_check: bool = False
 
     # Database

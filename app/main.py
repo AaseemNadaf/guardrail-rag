@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.llm_settings import configure_llama_index
+from app.services.ingestion import ensure_index
 from app.routers import audit, auth, query
 
 # REQUIRED for any guardrail log line to appear. Without it, Python's default
@@ -31,9 +32,16 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Creates audit tables and points LlamaIndex at Ollama before serving."""
+    """Creates audit tables, points LlamaIndex at Ollama, and indexes if needed."""
     init_db()
     configure_llama_index()
+
+    # Change-detected: a no-op hash check when nothing changed, which matters
+    # because --reload fires this on every file save. ensure_index() never
+    # raises, so a down Ollama tunnel can't stop the API from booting.
+    if settings.auto_ingest_on_startup:
+        ensure_index()
+
     yield
 
 
