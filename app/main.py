@@ -7,7 +7,7 @@ Layer ownership:
   - Retrieval + generation     -> app/services/ingestion.py, app/routers/query.py  [done]
   - Layer 2 (PII redaction)    -> app/services/redaction.py                        [done]
   - Layer 3 (output guardrails)-> app/services/guardrails.py                       [done]
-  - Audit logging              -> app/services/audit.py                           (todo)
+  - Audit logging              -> app/services/audit.py, app/routers/audit.py      [done]
 """
 import logging
 from contextlib import asynccontextmanager
@@ -15,13 +15,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.config import settings
+from app.core.database import init_db
 from app.core.llm_settings import configure_llama_index
-from app.routers import auth, query
+from app.routers import audit, auth, query
 
 # REQUIRED for any guardrail log line to appear. Without it, Python's default
 # level is WARNING and every logger.info() call in the guardrail layers is
 # silently dropped - including the retrieval scores needed to tune the
-# relevance cutoff. Verified to work under uvicorn.
+# relevance cutoff.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(name)s %(levelname)s: %(message)s",
@@ -30,7 +31,8 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Points LlamaIndex's global Settings at Ollama before any requests come in."""
+    """Creates audit tables and points LlamaIndex at Ollama before serving."""
+    init_db()
     configure_llama_index()
     yield
 
@@ -38,7 +40,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GuardRail RAG",
     description="Zero-Trust middleware for secure, PII-safe RAG.",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 
@@ -57,3 +59,4 @@ def health_check():
 
 app.include_router(auth.router)
 app.include_router(query.router)
+app.include_router(audit.router)

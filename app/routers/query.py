@@ -1,20 +1,18 @@
 """
-All three guardrail layers are live on this endpoint.
+All three guardrail layers are live on this endpoint, and every request is
+written to the audit log - including refusals, which are the most important
+entries to have a record of.
 
-Layer 1 (pre-retrieval): JWT auth + RBAC. The caller's role determines
-their classification clearance, which becomes a Qdrant metadata filter -
-chunks above their clearance are never retrieved.
-
-Layer 2 (post-retrieval): PII redaction on retrieved chunks, BEFORE the
-LLM sees them.
-
-Layer 3 (post-generation): relevance floor + empty-context refusal,
-output PII re-scan, and an optional groundedness check.
+Layer 1 (pre-retrieval): JWT auth + RBAC metadata filter.
+Layer 2 (post-retrieval): PII redaction before the LLM sees anything.
+Layer 3 (post-generation): relevance floor + empty-context refusal, output
+PII re-scan, optional groundedness check.
 
 Retrieval and generation are separate steps (not one query_engine.query()
 call) specifically so Layers 2 and 3 can sit between and after them.
 """
 import logging
+import time
 
 import qdrant_client
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,9 +21,12 @@ from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.core.response_synthesizers import get_response_synthesizer
 from llama_index.core.vector_stores import MetadataFilter, MetadataFilters, FilterOperator
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.database import get_session
 from app.core.dependencies import get_current_user
+from app.services.audit import record_query
 from app.services.guardrails import (
     REFUSAL_MESSAGE,
     apply_output_guardrails,
@@ -62,8 +63,14 @@ def ingest_documents():
 
 
 @router.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest, current_user: dict = Depends(get_current_user)):
+def query(
+    request: QueryRequest,
+    current_user: dict = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
     """RBAC-filtered retrieval -> relevance floor -> redaction -> generation -> output guardrails."""
+    started = time.perf_counter()
+
     client = qdrant_client.QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
     collections = [c.name for c in client.get_collections().collections]
     if settings.qdrant_collection_name not in collections:
@@ -80,10 +87,8 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
     retriever = index.as_retriever(similarity_top_k=3, filters=rbac_filter)
     nodes = retriever.retrieve(request.question)
 
-    # Log every score BEFORE filtering. This is the data needed to tune
-    # retrieval_similarity_cutoff - guessing a threshold without seeing the
-    # real score distribution for this embedding model is how you end up
-    # with a cutoff that either refuses everything or nothing.
+    # Log every score BEFORE filtering - this is the data needed to tune
+    # retrieval_similarity_cutoff against the real score distribution.
     logger.info(
         "Retrieval scores (user=%s, clearance=%s, cutoff=%.2f, q=%r):\n%s",
         current_user["username"], allowed, settings.retrieval_similarity_cutoff,
@@ -95,12 +100,14 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
         ) or "  (no nodes retrieved)",
     )
 
+    retrieved_count = len(nodes)
+    top_score = max((n.score for n in nodes), default=None)
+
     # Relevance floor. Vector search returns nearest neighbours regardless of
     # how weak the match is, so without this the system always has "context"
-    # and refusal falls to the LLM - the exact LLM-as-gatekeeper pattern this
+    # and refusal falls to the LLM - the LLM-as-gatekeeper pattern this
     # architecture rejects. Dropping weak matches makes the refusal below a
     # deterministic control instead.
-    retrieved_count = len(nodes)
     nodes = SimilarityPostprocessor(
         similarity_cutoff=settings.retrieval_similarity_cutoff
     ).postprocess_nodes(nodes)
@@ -118,6 +125,19 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
             "Layer 3 refusal — no authorized relevant context for user=%s (clearance=%s)",
             current_user["username"], allowed,
         )
+        record_query(
+            session,
+            username=current_user["username"],
+            role=current_user["role"],
+            allowed_classifications=allowed,
+            question=request.question,
+            retrieved_count=retrieved_count,
+            kept_count=0,
+            top_score=top_score,
+            refused=True,
+            refusal_reason="no_relevant_authorized_context",
+            response_time_sec=time.perf_counter() - started,
+        )
         return QueryResponse(
             answer=REFUSAL_MESSAGE,
             source_count=0,
@@ -130,8 +150,8 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
         redacted = redact_text(original)
         node_with_score.node.set_content(redacted)
         # DEBUG: visible via `docker-compose logs api`, never returned in a
-        # response. Remove or gate behind a DEBUG flag once redaction is
-        # no longer being actively verified.
+        # response and never written to the audit log. Remove or gate behind
+        # a DEBUG flag once redaction is no longer being actively verified.
         logger.info(
             "Layer 2 redaction — node %d/%d (user=%s):\n--- BEFORE ---\n%s\n--- AFTER ---\n%s",
             i + 1, len(nodes), current_user["username"], original, redacted,
@@ -147,6 +167,21 @@ def query(request: QueryRequest, current_user: dict = Depends(get_current_user))
         nodes=nodes,
         llm=Settings.llm,
         check_grounding=settings.enable_groundedness_check,
+    )
+
+    record_query(
+        session,
+        username=current_user["username"],
+        role=current_user["role"],
+        allowed_classifications=allowed,
+        question=request.question,
+        retrieved_count=retrieved_count,
+        kept_count=len(nodes),
+        top_score=top_score,
+        pii_redacted=result.pii_leaked,
+        refused=False,
+        grounded=result.grounded,
+        response_time_sec=time.perf_counter() - started,
     )
 
     return QueryResponse(
