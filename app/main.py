@@ -36,6 +36,25 @@ async def lifespan(app: FastAPI):
     init_db()
     configure_llama_index()
 
+    # A baseline evaluation arm runs with security controls switched off. That
+    # is legitimate for measurement and dangerous everywhere else, so say so
+    # loudly at boot - a disabled layer should never be something you discover
+    # afterwards from the results.
+    disabled = settings.security_layers_disabled
+    if disabled:
+        logging.getLogger("guardrail").warning(
+            "=" * 72
+            + "\nSECURITY LAYERS DISABLED: %s"
+            + "\nThis process is running as evaluation condition %r."
+            + "\nDo not use this configuration for anything but a measurement run.\n"
+            + "=" * 72,
+            ", ".join(disabled), settings.condition_label,
+        )
+    else:
+        logging.getLogger("guardrail").info(
+            "All security layers enabled (condition=%s)", settings.condition_label
+        )
+
     # Change-detected: a no-op hash check when nothing changed, which matters
     # because --reload fires this on every file save. ensure_index() never
     # raises, so a down Ollama tunnel can't stop the API from booting.
@@ -62,6 +81,13 @@ def health_check():
         "llm_model": settings.ollama_llm_model,
         "similarity_cutoff": settings.retrieval_similarity_cutoff,
         "groundedness_check": settings.enable_groundedness_check,
+        # Surfaced so a run's configuration can be confirmed from outside the
+        # process, before spending hours generating numbers under it.
+        "condition": settings.condition_label,
+        "rbac_filter": settings.enable_rbac_filter,
+        "relevance_floor": settings.enable_relevance_floor,
+        "pii_redaction": settings.enable_pii_redaction,
+        "security_layers_disabled": settings.security_layers_disabled,
     }
 
 

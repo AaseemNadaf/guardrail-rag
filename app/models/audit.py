@@ -8,6 +8,7 @@ audit access read documents above their own clearance. The question text is
 stored because it's the user's own input and is needed to interpret the
 decision trail.
 """
+import json
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
@@ -35,6 +36,24 @@ class AuditLog(Base):
     kept_count: Mapped[int] = mapped_column(Integer, default=0)
     top_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # What came back, as JSON: [{"file", "classification", "score", "kept"}].
+    # Counts alone cannot support the paper's headline Layer 1 claim - proving
+    # zero unauthorised retrievals requires knowing WHICH documents were
+    # returned and at what classification, per query.
+    #
+    # Filenames are metadata, not content, so this does not reintroduce the
+    # problem the no-document-text rule exists to prevent. It is a narrower
+    # exception than it looks, but it is an exception: a filename can itself
+    # be disclosive ("2026_layoff_list.txt"), so audit read access stays
+    # scoped exactly as before.
+    retrieved_docs: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Chunks returned whose classification exceeded the caller's clearance.
+    # Computed at write time rather than derived later so a non-zero value is
+    # visible immediately in the log and the audit UI, instead of surfacing
+    # weeks later when the results are compiled.
+    unauthorized_retrieved: Mapped[int] = mapped_column(Integer, default=0)
+
     # Layer 2 / Layer 3 outcomes
     pii_redacted: Mapped[bool] = mapped_column(Boolean, default=False)
     refused: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -42,6 +61,22 @@ class AuditLog(Base):
     grounded: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     response_time_sec: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Per-stage latency in milliseconds. A single total cannot produce the
+    # "overhead per layer" table - that needs each stage measured separately.
+    # Nullable because a refused query never reaches generation, and a null
+    # must stay distinguishable from a genuine zero when averaging.
+    t_embed_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    t_retrieve_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    t_floor_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    t_redact_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    t_generate_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    t_guardrails_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Which evaluation arm produced this row (see Settings.condition_label).
+    # Without it the baseline and full-pipeline runs are indistinguishable in
+    # the database and cannot be compared.
+    condition: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
 
     def to_dict(self) -> dict:
         """Shape matches what the audit-viewer UI consumes."""
@@ -62,4 +97,15 @@ class AuditLog(Base):
             "refusal_reason": self.refusal_reason,
             "grounded": self.grounded,
             "response_time_sec": round(self.response_time_sec, 2),
+            "unauthorized_retrieved": self.unauthorized_retrieved,
+            "retrieved_docs": json.loads(self.retrieved_docs) if self.retrieved_docs else [],
+            "condition": self.condition,
+            "stage_ms": {
+                "embed": self.t_embed_ms,
+                "retrieve": self.t_retrieve_ms,
+                "floor": self.t_floor_ms,
+                "redact": self.t_redact_ms,
+                "generate": self.t_generate_ms,
+                "guardrails": self.t_guardrails_ms,
+            },
         }

@@ -47,10 +47,57 @@ class Settings(BaseSettings):
     # red-teaming runs and for the paper's latency-overhead measurements.
     enable_groundedness_check: bool = False
 
+    # --- EVALUATION TOGGLES -------------------------------------------------
+    # These DISABLE SECURITY CONTROLS. They exist solely so the evaluation can
+    # run a baseline ("vanilla RAG") arm to measure the guardrails against -
+    # without a baseline there is no overhead figure and no attack-success
+    # delta, so the paper has nothing to compare. Every one defaults to the
+    # secure setting, each disabled layer is logged loudly at startup and
+    # recorded on every audit row, and /health reports the live values so a
+    # run can never be mistaken for a secured one after the fact.
+    #
+    # NEVER set these false outside a measurement run.
+    enable_rbac_filter: bool = True
+    enable_relevance_floor: bool = True
+    enable_pii_redaction: bool = True
+
+    # Label for the evaluation arm this process represents, stamped onto every
+    # audit row so the compilation script can group runs. Left unset, a label
+    # is derived from the toggles above, which is safer than a hand-typed one:
+    # a derived label cannot disagree with the configuration that produced it.
+    eval_condition: str | None = None
+
     # Database
     database_url: str = "sqlite:///./data/guardrail.db"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @property
+    def security_layers_disabled(self) -> list[str]:
+        """Names of the controls currently switched off. Empty in a secure run."""
+        off = []
+        if not self.enable_rbac_filter:
+            off.append("rbac_filter")
+        if not self.enable_relevance_floor:
+            off.append("relevance_floor")
+        if not self.enable_pii_redaction:
+            off.append("pii_redaction")
+        return off
+
+    @property
+    def condition_label(self) -> str:
+        """
+        The evaluation arm label. Derived from live config unless overridden,
+        so it always describes the run that actually happened.
+        """
+        if self.eval_condition:
+            return self.eval_condition
+        return (
+            f"rbac={int(self.enable_rbac_filter)}"
+            f",floor={self.retrieval_similarity_cutoff if self.enable_relevance_floor else 'off'}"
+            f",redact={int(self.enable_pii_redaction)}"
+            f",ground={int(self.enable_groundedness_check)}"
+        )
 
 
 settings = Settings()
