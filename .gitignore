@@ -9,3 +9,7 @@ venv/
 data/mock_docs/*
 !data/mock_docs/classifications.json
 !data/mock_docs/*.txt
+
+# evaluation artifacts
+data/eval/runs/
+paper/generated/
