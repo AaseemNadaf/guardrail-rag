@@ -1,0 +1,481 @@
+{
+  "_meta": {
+    "description": "Ground-truth PII labels for redaction evaluation (GuardRail RAG)",
+    "corpus": "data/mock_docs",
+    "document_count": 20,
+    "entity_types": [
+      "PERSON",
+      "EMAIL_ADDRESS",
+      "PHONE_NUMBER",
+      "LOCATION",
+      "CREDIT_CARD",
+      "US_SSN",
+      "IBAN_CODE"
+    ],
+    "position_scheme": "occurrence_index: the nth exact occurrence of 'text' within the document. Character offsets are deliberately NOT used - the repo stores LF but Windows checkouts get CRLF, so offsets would not be portable.",
+    "method": "Labelled by direct reading of the source documents. No NER library was used to decide what counts as PII, so the key is independent of the tool it evaluates. LLM-drafted; spot-checked by a team member against 6 of the 20 source documents on 2026-10-16, no discrepancies found. The remaining 14 documents are unverified.",
+    "rules": [
+      "PERSON covers the name only, never the job title ('Onboarding Coordinator Vikram Joshi' -> 'Vikram Joshi').",
+      "EMAIL_ADDRESS includes role mailboxes (ethics@, it.support@, hr.ops@, security-incident@), not only personal ones.",
+      "Organisation names ('GuardRail Corp') are not a configured entity type and are not labelled.",
+      "Employee IDs are not a configured entity type; recorded under out_of_scope.",
+      "Monetary amounts and salary figures are not a configured entity type; recorded under out_of_scope.",
+      "'IST' is a timezone abbreviation, not a LOCATION, and is not labelled.",
+      "Every occurrence is labelled separately; recall is computed per occurrence.",
+      "No LOCATION, CREDIT_CARD, US_SSN or IBAN_CODE instances exist in this corpus."
+    ],
+    "notes": [
+      "Corpus is 20 documents, not 21 - the 21st directory entry is classifications.json.",
+      "Priya Sharma appears in 3 documents with two different phone numbers (800-123-4567 in hr_salary_bands.txt, +91-98765-47210 in salary_bands.txt) and two employee-ID schemes. This is an inconsistency in the synthetic data, not a labelling decision; it does not affect per-occurrence scoring.",
+      "Ananya Reddy appears with different job titles in disciplinary_procedure.txt ('HR Lead') and leave_policy.txt ('HR Operations Executive'). Same note as above.",
+      "hr_salary_bands.txt and salary_bands.txt overlap heavily in content but carry different classifications (Internal vs Confidential). Retrieval may return either; the classification label is what matters for access-control scoring.",
+      "disciplinary_procedure.txt links employee ID GC-EMP-2187 to a named person and a disciplinary outcome. If the name is redacted but the ID is not, the record remains re-identifiable - see out_of_scope entries."
+    ],
+    "totals": {
+      "EMAIL_ADDRESS": 22,
+      "PERSON": 18,
+      "PHONE_NUMBER": 8
+    }
+  },
+  "documents": {
+    "attendance_policy.txt": {
+      "labels": [
+        {
+          "text": "hr.ops@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "benefits_guide.txt": {
+      "labels": [
+        {
+          "text": "Ritu Sharma",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "ritu.sharma@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "₹5 lakhs",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹25,000",
+          "reason": "monetary amount"
+        }
+      ]
+    },
+    "code_of_conduct.txt": {
+      "labels": [
+        {
+          "text": "ethics@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "communication_guidelines.txt": {
+      "labels": [],
+      "out_of_scope": []
+    },
+    "data_classification_policy.txt": {
+      "labels": [
+        {
+          "text": "Sneha Nair",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "sneha.nair@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "GC-SEC-1021",
+          "reason": "employee ID"
+        }
+      ]
+    },
+    "disciplinary_procedure.txt": {
+      "labels": [
+        {
+          "text": "Rohan Mehta",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Ananya Reddy",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "ananya.reddy@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-99887-76655",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "GC-EMP-2187",
+          "reason": "employee ID, directly linked to a named person and a disciplinary outcome"
+        }
+      ]
+    },
+    "eng_onboarding.txt": {
+      "labels": [
+        {
+          "text": "it.support@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Vikram Joshi",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "vikram.joshi@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "exit_policy.txt": {
+      "labels": [
+        {
+          "text": "Karan Malhotra",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "karan.malhotra@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "GC-HR-1156",
+          "reason": "employee ID"
+        }
+      ]
+    },
+    "expense_reimbursement.txt": {
+      "labels": [
+        {
+          "text": "Sneha Kulkarni",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "sneha.kulkarni@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "hr_salary_bands.txt": {
+      "labels": [
+        {
+          "text": "Arjun Mehta",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "arjun.mehta@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "912-345-6780",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Sneha Iyer",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "sneha.iyer@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "987-654-3210",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Rohan Desai",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "rohan.desai@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "911-222-3344",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Priya Sharma",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "priya.sharma@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "800-123-4567",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "EMP-1042",
+          "reason": "employee ID"
+        },
+        {
+          "text": "EMP-1087",
+          "reason": "employee ID"
+        },
+        {
+          "text": "EMP-1093",
+          "reason": "employee ID"
+        },
+        {
+          "text": "Rs 8,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "Rs 12,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "Rs 18,50,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "Rs 24,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "Rs 32,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "Rs 40,00,000",
+          "reason": "monetary amount"
+        }
+      ]
+    },
+    "incident_response.txt": {
+      "labels": [
+        {
+          "text": "Rohan Verma",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "rohan.verma@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-98765-43210",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        },
+        {
+          "text": "security-incident@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "it_policy.txt": {
+      "labels": [
+        {
+          "text": "it.support@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Arjun Desai",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "arjun.desai@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "leave_policy.txt": {
+      "labels": [
+        {
+          "text": "Ananya Reddy",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "ananya.reddy@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "meeting_norms.txt": {
+      "labels": [],
+      "out_of_scope": []
+    },
+    "office_access_policy.txt": {
+      "labels": [],
+      "out_of_scope": []
+    },
+    "performance_review.txt": {
+      "labels": [
+        {
+          "text": "Neha Kapoor",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "neha.kapoor@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "GC-HR-1098",
+          "reason": "employee ID"
+        }
+      ]
+    },
+    "promotion_policy.txt": {
+      "labels": [
+        {
+          "text": "Priya Sharma",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "priya.sharma@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "recruitment_policy.txt": {
+      "labels": [
+        {
+          "text": "Meera Iyer",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "meera.iyer@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-98765-12345",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "remote_work_policy.txt": {
+      "labels": [],
+      "out_of_scope": []
+    },
+    "salary_bands.txt": {
+      "labels": [
+        {
+          "text": "Priya Sharma",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "priya.sharma@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-98765-47210",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "GC-HR-1042",
+          "reason": "employee ID"
+        },
+        {
+          "text": "₹6,50,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹9,50,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹10,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹16,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹18,50,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹24,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹28,00,000",
+          "reason": "monetary amount"
+        },
+        {
+          "text": "₹36,00,000",
+          "reason": "monetary amount"
+        }
+      ]
+    }
+  }
+}
