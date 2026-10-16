@@ -45,6 +45,8 @@ from app.services.guardrails import (
     has_context,
 )
 from app.services.ingestion import build_index, get_existing_index
+from app.services.injection import BLOCK_MESSAGE as INJECTION_BLOCK_MESSAGE
+from app.services.injection import detect_injection
 from app.services.redaction import redact_text
 from app.services.users import get_allowed_classifications
 
@@ -115,6 +117,43 @@ def query(
     # baseline arm we still need to know what the user SHOULD have been able
     # to see, or there is nothing to measure unauthorised retrieval against.
     allowed = get_allowed_classifications(current_user["role"])
+
+    # --- Layer 1: prompt injection screening ---
+    # Deliberately first. A blocked query never reaches the embedder, the
+    # vector store or the LLM, so the block costs one regex pass instead of a
+    # retrieval and a generation. Screening is also scored and recorded even
+    # when the defence is switched off, so the baseline arm still produces the
+    # data needed to compare the two.
+    t0 = time.perf_counter()
+    injection = detect_injection(request.question, settings.injection_score_threshold)
+    stage_ms["injection"] = (time.perf_counter() - t0) * 1000
+
+    if injection.blocked and settings.enable_injection_defence:
+        logger.warning(
+            "Layer 1 injection block — user=%s score=%.1f patterns=%s",
+            current_user["username"], injection.score, injection.matches,
+        )
+        record_query(
+            session,
+            username=current_user["username"],
+            role=current_user["role"],
+            allowed_classifications=allowed,
+            question=request.question,
+            retrieved_count=0,
+            kept_count=0,
+            refused=True,
+            refusal_reason="prompt_injection_detected",
+            condition=settings.condition_label,
+            injection_score=injection.score,
+            injection_patterns=injection.summary,
+            response_time_sec=time.perf_counter() - started,
+            stage_ms=stage_ms,
+        )
+        return QueryResponse(
+            answer=INJECTION_BLOCK_MESSAGE,
+            source_count=0,
+            allowed_classifications=allowed,
+        )
 
     rbac_filter = None
     if settings.enable_rbac_filter:
@@ -192,6 +231,8 @@ def query(
         retrieved_docs=retrieved_docs,
         unauthorized_retrieved=len(unauthorized),
         condition=settings.condition_label,
+        injection_score=injection.score,
+        injection_patterns=injection.summary,
     )
 
     # --- Layer 3 (pre-generation gate) ---

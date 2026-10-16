@@ -54,6 +54,12 @@ class AuditLog(Base):
     # weeks later when the results are compiled.
     unauthorized_retrieved: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Layer 1 injection screening. Score and matched pattern names are kept so
+    # a block can be justified after the fact and the threshold re-swept from
+    # logged data without re-running the corpus.
+    injection_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    injection_patterns: Mapped[str | None] = mapped_column(String(512), nullable=True)
+
     # Layer 2 / Layer 3 outcomes
     pii_redacted: Mapped[bool] = mapped_column(Boolean, default=False)
     refused: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -98,6 +104,10 @@ class AuditLog(Base):
             "grounded": self.grounded,
             "response_time_sec": round(self.response_time_sec, 2),
             "unauthorized_retrieved": self.unauthorized_retrieved,
+            "injection_score": self.injection_score,
+            "injection_patterns": (
+                self.injection_patterns.split(",") if self.injection_patterns else []
+            ),
             "retrieved_docs": json.loads(self.retrieved_docs) if self.retrieved_docs else [],
             "condition": self.condition,
             "stage_ms": {

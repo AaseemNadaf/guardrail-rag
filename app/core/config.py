@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     # threshold (drop nodes far below the top hit) if the clusters overlap.
     retrieval_similarity_cutoff: float = 0.56
 
+    # Layer 1 — prompt injection screening
+    # Runs on the question before embedding, so a block costs one regex pass
+    # rather than a retrieval and a generation.
+    #
+    # 0.8 chosen from a sweep over the 71-case attack corpus: 75% of injection
+    # cases caught, zero false positives on the 16 benign controls. Lower
+    # thresholds catch more (92% at 0.4) but start changing the outcome of
+    # other hostile cases; higher ones lose recall fast (58% at 1.0). Patterns
+    # were written from the general injection taxonomy, NOT fitted to the
+    # corpus, so this recall figure is a real measurement.
+    enable_injection_defence: bool = True
+    injection_score_threshold: float = 0.8
+
     # Ingestion
     # Auto-ingest at startup, change-detected via a content hash of the corpus
     # plus classifications.json - a no-op when nothing changed. Set false to
@@ -82,6 +95,8 @@ class Settings(BaseSettings):
             off.append("relevance_floor")
         if not self.enable_pii_redaction:
             off.append("pii_redaction")
+        if not self.enable_injection_defence:
+            off.append("injection_defence")
         return off
 
     @property
@@ -97,6 +112,7 @@ class Settings(BaseSettings):
             f",floor={self.retrieval_similarity_cutoff if self.enable_relevance_floor else 'off'}"
             f",redact={int(self.enable_pii_redaction)}"
             f",ground={int(self.enable_groundedness_check)}"
+            f",inject={self.injection_score_threshold if self.enable_injection_defence else 'off'}"
         )
 
 

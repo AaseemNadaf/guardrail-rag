@@ -37,6 +37,8 @@ def record_query(
     unauthorized_retrieved: int = 0,
     condition: str | None = None,
     stage_ms: dict | None = None,
+    injection_score: float | None = None,
+    injection_patterns: str | None = None,
 ) -> AuditLog | None:
     stage_ms = stage_ms or {}
     entry = AuditLog(
@@ -55,6 +57,8 @@ def record_query(
         retrieved_docs=json.dumps(retrieved_docs) if retrieved_docs else None,
         unauthorized_retrieved=unauthorized_retrieved,
         condition=condition,
+        injection_score=injection_score,
+        injection_patterns=injection_patterns or None,
         t_embed_ms=stage_ms.get("embed"),
         t_retrieve_ms=stage_ms.get("retrieve"),
         t_floor_ms=stage_ms.get("floor"),

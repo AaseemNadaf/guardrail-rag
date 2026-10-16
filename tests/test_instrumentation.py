@@ -38,7 +38,7 @@ def _settings(**over):
 
 def test_default_condition_label_describes_a_secure_run():
     s = _settings()
-    assert s.condition_label == "rbac=1,floor=0.56,redact=1,ground=0"
+    assert s.condition_label == "rbac=1,floor=0.56,redact=1,ground=0,inject=0.8"
     assert s.security_layers_disabled == []
 
 
@@ -49,7 +49,7 @@ def test_condition_label_tracks_disabled_layers():
     config change and silently mislabels every row after it.
     """
     s = _settings(enable_rbac_filter=False, enable_pii_redaction=False)
-    assert s.condition_label == "rbac=0,floor=0.56,redact=0,ground=0"
+    assert s.condition_label == "rbac=0,floor=0.56,redact=0,ground=0,inject=0.8"
 
 
 def test_condition_label_reflects_floor_being_off():
