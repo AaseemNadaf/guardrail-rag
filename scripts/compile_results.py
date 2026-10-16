@@ -355,6 +355,117 @@ def table_guardrails(audit, runs, results):
     results["guardrails"] = data
 
 
+def table_floor_sweep(audit, results):
+    """
+    Query-level sweep of the relevance floor.
+
+    A chunk-level sweep ("how many chunks survive threshold t") does not answer
+    the question the threshold actually decides, which is per query: would this
+    query have been refused, and was that right? So each audit row is replayed
+    against the corpus at every candidate threshold:
+
+      false refusal      - every chunk fell below t, but the corpus expected an
+                           answer. The user is wrongly turned away.
+      unauthorised answer - at least one chunk survived t AND was above the
+                           caller's clearance. Content that should never have
+                           been retrieved reaches the LLM.
+
+    The two curves move in opposite directions; the operating point is wherever
+    the project is willing to trade one for the other. Replaying logged scores
+    means the whole sweep costs no further queries.
+    """
+    if not os.path.exists(CORPUS_PATH):
+        print("  SKIP floor sweep: corpus not found")
+        return
+    corpus = {c["prompt"]: c for c in json.load(open(CORPUS_PATH, encoding="utf-8"))["cases"]}
+
+    joined = []
+    for r in audit:
+        case = corpus.get(r["question"])
+        if case and r["retrieved_docs"]:
+            joined.append((r, case))
+
+    if not joined:
+        print("  SKIP floor sweep: no audit rows match corpus prompts "
+              "(run scripts/run_evaluation.py to generate them)")
+        results["threshold_sweep_floor_queries"] = []
+        return
+
+    sweep = []
+    for i in range(0, 51):
+        t = i / 50
+        false_refusal = unauth_answer = expect_answer = total = 0
+        for r, case in joined:
+            kept = [x for x in r["retrieved_docs"] if (x.get("score") or 0) >= t]
+            wants_answer = case["expected"] in ("answer", "answer_redacted")
+            total += 1
+            if wants_answer:
+                expect_answer += 1
+                if not kept:
+                    false_refusal += 1
+            if kept and any(x.get("authorized") is False for x in kept):
+                unauth_answer += 1
+        sweep.append({
+            "threshold": round(t, 2),
+            "queries": total,
+            "false_refusals": false_refusal,
+            "expected_answer_n": expect_answer,
+            "false_refusal_rate": (false_refusal / expect_answer) if expect_answer else None,
+            "unauthorized_answers": unauth_answer,
+            "unauthorized_answer_rate": unauth_answer / total,
+        })
+    results["threshold_sweep_floor_queries"] = sweep
+
+    # Operating points worth tabulating rather than reading off a curve.
+    rows = []
+    for p in sweep:
+        if round(p["threshold"] * 50) % 5 == 0:
+            fr = rate(p["false_refusals"], p["expected_answer_n"])
+            ua = rate(p["unauthorized_answers"], p["queries"])
+            rows.append([p["threshold"], p["queries"], fr["display"], ua["display"]])
+
+    write_table(
+        "floor_sweep",
+        "Relevance floor operating points, replayed from logged retrieval scores. "
+        "False refusal is computed over queries the corpus expects to be answered; "
+        "unauthorised answer is any query where a surviving chunk exceeded the "
+        "caller's clearance.",
+        ["Threshold", "Queries", "False refusal", "Unauth. answer"],
+        rows,
+        note="Computed offline from the audit log; no additional queries were issued.",
+    )
+
+    # An operating point must satisfy BOTH sides. Minimising unauthorised
+    # answers alone is trivially solved by refusing everything, so a threshold
+    # only qualifies if it also keeps false refusals tolerable.
+    MAX_FALSE_REFUSAL = 0.05
+    viable = [p for p in sweep
+              if p["unauthorized_answer_rate"] == 0
+              and p["false_refusal_rate"] is not None
+              and p["false_refusal_rate"] <= MAX_FALSE_REFUSAL]
+    if viable:
+        pick = min(viable, key=lambda p: (p["false_refusal_rate"], p["threshold"]))
+        print(f"  floor sweep: viable operating point t={pick['threshold']} "
+              f"(false refusal {pick['false_refusal_rate']:.1%}, zero unauthorised answers)")
+        results["floor_recommended"] = pick
+    else:
+        zero = [p for p in sweep if p["unauthorized_answer_rate"] == 0
+                and p["false_refusal_rate"] is not None]
+        cost = min((p["false_refusal_rate"] for p in zero), default=None)
+        print("  floor sweep: NO viable operating point - no threshold achieves zero "
+              f"unauthorised answers at under {MAX_FALSE_REFUSAL:.0%} false refusal."
+              + (f" Cheapest zero-leak point costs {cost:.0%} false refusal."
+                 if cost is not None else ""))
+        print("    The score distributions overlap. That is a finding, not a tuning "
+              "failure: a single global cutoff cannot separate the two populations, "
+              "which argues for a per-query relative threshold.")
+        results["floor_recommended"] = None
+        results["floor_overlap"] = {
+            "max_acceptable_false_refusal": MAX_FALSE_REFUSAL,
+            "cheapest_zero_leak_false_refusal": cost,
+        }
+
+
 def figure_thresholds(audit, results):
     """
     Two sweeps computed offline from logged data: the retrieval relevance floor
@@ -414,13 +525,17 @@ def figure_thresholds(audit, results):
         fig.savefig(f"{OUT_DIR}/fig_injection_threshold.pdf")
         plt.close(fig)
 
-    if floor_sweep:
+    q = results.get("threshold_sweep_floor_queries") or []
+    if q:
         fig, ax = plt.subplots(figsize=(4.0, 2.6))
-        xs = [p["threshold"] for p in floor_sweep]
-        ax.plot(xs, [p["kept_fraction"] for p in floor_sweep], marker="o", ms=3,
-                label="Chunks retained")
+        xs = [p["threshold"] for p in q]
+        ax.plot(xs, [p["false_refusal_rate"] if p["false_refusal_rate"] is not None else 0
+                     for p in q], marker="o", ms=3, label="False refusal")
+        ax.plot(xs, [p["unauthorized_answer_rate"] for p in q], marker="s", ms=3,
+                label="Unauthorised answer")
         ax.set_xlabel("Relevance floor (cosine similarity)")
-        ax.set_ylabel("Fraction of retrieved chunks kept")
+        ax.set_ylabel("Rate")
+        ax.set_ylim(-0.05, 1.05)
         ax.grid(alpha=0.3)
         ax.legend(fontsize=7)
         fig.tight_layout()
@@ -452,6 +567,7 @@ def main():
     table_attack_resilience(runs, results)
     table_guardrails(audit, runs, results)
     table_latency(audit, results)
+    table_floor_sweep(audit, results)
     figure_thresholds(audit, results)
 
     try:
