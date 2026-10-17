@@ -14,6 +14,8 @@ def configure_llama_index() -> None:
         model=app_settings.ollama_llm_model,
         base_url=app_settings.ollama_base_url,
         request_timeout=180.0,
+        # Explicit, never -1: see Settings.ollama_context_window.
+        context_window=app_settings.ollama_context_window,
     )
     Settings.embed_model = OllamaEmbedding(
         model_name=app_settings.ollama_embed_model,

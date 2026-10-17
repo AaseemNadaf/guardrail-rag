@@ -23,6 +23,26 @@ class Settings(BaseSettings):
     ollama_llm_model: str = "llama3.1:8b-instruct-q4_K_M"
     ollama_embed_model: str = "nomic-embed-text"
 
+    # Context window requested from Ollama on every generation call.
+    #
+    # MUST be set explicitly. When left unset, LlamaIndex's Ollama client asks
+    # the server for the model's MAXIMUM context length and sends that as
+    # num_ctx - 131,072 tokens for Llama 3.1. Ollama then allocates a KV cache
+    # sized for 128K tokens (~16 GB at fp16) on every request, which cannot fit
+    # a consumer GPU, so most of the model spills to CPU and every latency
+    # measurement silently describes a degraded configuration.
+    #
+    # 2048 is sized to the workload: three retrieved chunks from this corpus
+    # (largest document ~860 bytes) plus the QA template and question come to
+    # well under 1,000 tokens, leaving ~1,000 for the answer. Raise it if the
+    # corpus gains longer documents - Ollama truncates an over-long prompt from
+    # the START, which would drop retrieved context without any error.
+    #
+    # 4096 was the first choice, but measured on the reference RTX 3050 (6 GB)
+    # it still spilled 25% of the model to CPU - Windows reserves part of the
+    # VRAM, so the usable budget is nearer 5.3 GB than 6.
+    ollama_context_window: int = 2048
+
     # Retrieval
     # Vector search returns nearest neighbours, not relevant ones - with no
     # floor, similarity_top_k always returns k documents no matter how poorly

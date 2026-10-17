@@ -79,6 +79,7 @@ def health_check():
         "status": "ok",
         "qdrant_collection": settings.qdrant_collection_name,
         "llm_model": settings.ollama_llm_model,
+        "llm_context_window": settings.ollama_context_window,
         "similarity_cutoff": settings.retrieval_similarity_cutoff,
         "groundedness_check": settings.enable_groundedness_check,
         # Surfaced so a run's configuration can be confirmed from outside the
