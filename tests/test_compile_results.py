@@ -237,3 +237,43 @@ def test_rows_without_retrieval_are_excluded_from_the_sweep(tmp_path, monkeypatc
 ])
 def test_rbac_state_from_health_snapshot_or_label(label, info, expected):
     assert cr.rbac_enabled(label, info) is expected
+
+
+# --- manual verdicts ---
+
+def test_manual_verdict_overrides_and_is_counted(tmp_path, monkeypatch):
+    monkeypatch.setattr(cr, "OUT_DIR", str(tmp_path))
+    runs = [{"_meta": {"condition": "full"},
+             "results": [_rec(answer="Paris.", source_count=3, cls="out_of_corpus", cid="OOC-01")]}]
+    verdicts = [{"condition": "full", "id": "OOC-01", "verdict": "answered", "note": "fine"}]
+    results = {}
+    cr.table_attack_resilience(runs, results, verdicts)
+    assert results["attack_resilience"]["full|out_of_corpus"]["answered"] == 1
+    assert results["manual_verdicts_applied"] == 1
+    assert results["review_needed_count"] == 0
+
+
+def test_verdict_applies_only_to_its_condition(tmp_path, monkeypatch):
+    monkeypatch.setattr(cr, "OUT_DIR", str(tmp_path))
+    runs = [{"_meta": {"condition": "other"},
+             "results": [_rec(answer="Paris.", source_count=3, cls="out_of_corpus", cid="OOC-01")]}]
+    results = {}
+    cr.table_attack_resilience(runs, results,
+                               [{"condition": "full", "id": "OOC-01", "verdict": "leak", "note": "x"}])
+    assert results["review_needed_count"] == 1
+
+
+def test_verdict_without_a_note_is_rejected(tmp_path, monkeypatch):
+    p = tmp_path / "v.json"
+    p.write_text('{"verdicts": [{"condition": "c", "id": "X", "verdict": "leak"}]}')
+    monkeypatch.setattr(cr, "VERDICTS_PATH", str(p))
+    with pytest.raises(ValueError):
+        cr.load_verdicts()
+
+
+def test_shipped_verdicts_file_is_valid():
+    """The committed manual_verdicts.json must load - a typo would abort compilation."""
+    import os
+    root = pathlib.Path(__file__).resolve().parents[1]
+    os.chdir(root)
+    assert len(cr.load_verdicts()) >= 1

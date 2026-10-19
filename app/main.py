@@ -88,6 +88,8 @@ def health_check():
         "rbac_filter": settings.enable_rbac_filter,
         "relevance_floor": settings.enable_relevance_floor,
         "pii_redaction": settings.enable_pii_redaction,
+        "injection_defence": settings.enable_injection_defence,
+        "output_pii_scan": settings.enable_output_pii_scan,
         "security_layers_disabled": settings.security_layers_disabled,
     }
 

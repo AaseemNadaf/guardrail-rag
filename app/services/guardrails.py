@@ -112,12 +112,17 @@ def apply_output_guardrails(
     nodes,
     llm=None,
     check_grounding: bool = False,
+    scrub_pii: bool = True,
 ) -> GuardrailResult:
     """
     Runs the post-generation checks. `nodes` are the retrieved (already
     redacted) nodes the answer was generated from.
     """
-    scrubbed, pii_leaked = scrub_output_pii(answer)
+    # scrub_pii=False exists only for the evaluation baseline arm.
+    if scrub_pii:
+        scrubbed, pii_leaked = scrub_output_pii(answer)
+    else:
+        scrubbed, pii_leaked = answer, False
     if pii_leaked:
         logger.warning("Layer 3 caught PII in generated output that Layer 2 did not remove")
 

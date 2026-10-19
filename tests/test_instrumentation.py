@@ -190,3 +190,63 @@ def test_iter_all_is_oldest_first(session):
         )
     questions = [e.question for e in iter_all(session)]
     assert questions == ["q0", "q1", "q2"]
+
+
+# --- LLM context window ---
+
+def test_llm_context_window_is_pinned_not_discovered():
+    """
+    Regression guard for a silent benchmark-invalidating bug. With
+    context_window unset, LlamaIndex queries the model's maximum (131,072 for
+    Llama 3.1) and sends it as num_ctx on every request, forcing ~16 GB of KV
+    cache and a CPU spill. The configured value must reach the client and must
+    never be the -1 sentinel that triggers discovery.
+    """
+    import os
+    os.environ.setdefault("JWT_SECRET_KEY", "test")
+    from llama_index.core import Settings as LISettings
+    from app.core.config import settings
+    from app.core.llm_settings import configure_llama_index
+
+    configure_llama_index()
+    assert LISettings.llm.context_window == settings.ollama_context_window
+    assert LISettings.llm.context_window != -1
+    assert settings.ollama_context_window <= 8192
+
+
+# --- Layer 3 output PII scan toggle ---
+
+def test_output_pii_scan_defaults_on_and_keeps_existing_label():
+    """
+    Appending ',out=1' to every label would have split new secure runs from
+    the ones already recorded. The token appears only when the scan is off.
+    """
+    s = _settings()
+    assert s.enable_output_pii_scan is True
+    assert "out=" not in s.condition_label
+
+
+def test_output_pii_scan_off_is_labelled_and_reported():
+    s = _settings(enable_output_pii_scan=False)
+    assert s.condition_label.endswith(",out=0")
+    assert "output_pii_scan" in s.security_layers_disabled
+
+
+def test_vanilla_baseline_disables_every_layer():
+    """A baseline that leaves Layer 3 on measures Layer 3, not an unprotected pipeline."""
+    s = _settings(enable_rbac_filter=False, enable_relevance_floor=False,
+                  enable_pii_redaction=False, enable_injection_defence=False,
+                  enable_output_pii_scan=False)
+    assert set(s.security_layers_disabled) == {
+        "rbac_filter", "relevance_floor", "pii_redaction",
+        "injection_defence", "output_pii_scan",
+    }
+
+
+def test_output_guardrails_pass_answer_through_when_scan_disabled():
+    from app.services.guardrails import apply_output_guardrails
+    answer = "Contact Arjun Mehta at arjun.mehta@guardrailcorp.com"
+    off = apply_output_guardrails(answer=answer, nodes=[], scrub_pii=False)
+    assert off.answer == answer and off.pii_leaked is False
+    on = apply_output_guardrails(answer=answer, nodes=[])
+    assert "arjun.mehta@guardrailcorp.com" not in on.answer and on.pii_leaked is True

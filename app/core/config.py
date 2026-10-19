@@ -93,6 +93,10 @@ class Settings(BaseSettings):
     enable_rbac_filter: bool = True
     enable_relevance_floor: bool = True
     enable_pii_redaction: bool = True
+    # Layer 3's output PII re-scan. Without this toggle a "baseline" arm still
+    # scrubbed PII from every answer, so it measured Layer 3 alone rather than
+    # an unprotected pipeline - and Layer 2 showed no benefit over it.
+    enable_output_pii_scan: bool = True
 
     # Label for the evaluation arm this process represents, stamped onto every
     # audit row so the compilation script can group runs. Left unset, a label
@@ -117,6 +121,8 @@ class Settings(BaseSettings):
             off.append("pii_redaction")
         if not self.enable_injection_defence:
             off.append("injection_defence")
+        if not self.enable_output_pii_scan:
+            off.append("output_pii_scan")
         return off
 
     @property
@@ -133,6 +139,9 @@ class Settings(BaseSettings):
             f",redact={int(self.enable_pii_redaction)}"
             f",ground={int(self.enable_groundedness_check)}"
             f",inject={self.injection_score_threshold if self.enable_injection_defence else 'off'}"
+            # Appended only when off, so labels of runs recorded before this
+            # toggle existed still group with new secure runs.
+            + ("" if self.enable_output_pii_scan else ",out=0")
         )
 
 

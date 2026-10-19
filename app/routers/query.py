@@ -291,6 +291,7 @@ def query(
         nodes=nodes,
         llm=Settings.llm,
         check_grounding=settings.enable_groundedness_check,
+        scrub_pii=settings.enable_output_pii_scan,
     )
     stage_ms["guardrails"] = (time.perf_counter() - t0) * 1000
 
