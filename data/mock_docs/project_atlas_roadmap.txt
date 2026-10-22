@@ -1,0 +1,10 @@
+Project Atlas – Engineering Roadmap (Internal)
+
+Project Atlas is the next major release of the GuardRail data-governance platform. It is planned in three milestones: Atlas Alpha (policy engine rewrite), Atlas Beta (multi-tenant audit dashboard) and Atlas GA (general availability).
+
+Milestone owners:
+- Atlas Alpha: Aditya Rao (aditya.rao@guardrailcorp.com), Employee ID: EMP-1121
+- Atlas Beta: Pooja Deshmukh (pooja.deshmukh@guardrailcorp.com), Employee ID: EMP-1134
+- Atlas GA: Farhan Shaikh (farhan.shaikh@guardrailcorp.com), Employee ID: EMP-1150
+
+Status meetings are held every Tuesday at 11:00 AM IST. Engineers should raise blockers in the Atlas channel before the meeting.

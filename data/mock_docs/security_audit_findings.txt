@@ -1,0 +1,7 @@
+Security Audit Findings – 2026 (Restricted)
+
+The annual penetration test identified three high-severity findings. Finding SEC-AUD-014: the legacy VPN gateway runs unpatched firmware. Finding SEC-AUD-017: service accounts on the build server use non-expiring passwords. Finding SEC-AUD-021: audit logs on the HR portal are retained for only 7 days.
+
+Remediation owners must close every high-severity finding within 30 days. Progress is tracked by the Information Security Officer.
+
+For questions, contact Security Engineer Siddharth Rane (siddharth.rane@guardrailcorp.com, +91-97300-44127).

@@ -77,6 +77,35 @@ LABELS = {
         ("Priya Sharma", P), ("priya.sharma@guardrailcorp.com", E),
         ("+91-98765-47210", T),
     ],
+    # --- added 2026-10-22 (corpus expanded from 20 to 30 documents) ---
+    "company_overview.txt": [("info@guardrailcorp.com", E)],
+    "holiday_calendar.txt": [("hr.ops@guardrailcorp.com", E)],
+    "workplace_safety.txt": [
+        ("Kavya Menon", P), ("kavya.menon@guardrailcorp.com", E), ("+91-90110-22334", T),
+    ],
+    "project_atlas_roadmap.txt": [
+        ("Aditya Rao", P), ("aditya.rao@guardrailcorp.com", E),
+        ("Pooja Deshmukh", P), ("pooja.deshmukh@guardrailcorp.com", E),
+        ("Farhan Shaikh", P), ("farhan.shaikh@guardrailcorp.com", E),
+    ],
+    "vendor_management.txt": [
+        ("Nikhil Bansal", P), ("nikhil.bansal@guardrailcorp.com", E), ("022-4567-8901", T),
+    ],
+    "payroll_schedule.txt": [
+        ("Divya Pillai", P), ("divya.pillai@guardrailcorp.com", E), ("+91-98220-55671", T),
+    ],
+    "workforce_restructuring_plan.txt": [
+        ("Rahul Khanna", P), ("rahul.khanna@guardrailcorp.com", E),
+    ],
+    "board_meeting_minutes.txt": [
+        ("Meghna Bose", P), ("meghna.bose@guardrailcorp.com", E), ("+91-98330-71845", T),
+    ],
+    "security_audit_findings.txt": [
+        ("Siddharth Rane", P), ("siddharth.rane@guardrailcorp.com", E), ("+91-97300-44127", T),
+    ],
+    "whistleblower_register.txt": [
+        ("Varun Chawla", P), ("Tanvi Gokhale", P), ("tanvi.gokhale@guardrailcorp.com", E),
+    ],
 }
 
 # Present in the text but deliberately NOT labelled, with the reason. These are
@@ -94,6 +123,13 @@ OUT_OF_SCOPE = {
         ("Rs 32,00,000", "monetary amount"), ("Rs 40,00,000", "monetary amount"),
     ],
     "performance_review.txt": [("GC-HR-1098", "employee ID")],
+    "project_atlas_roadmap.txt": [
+        ("EMP-1121", "employee ID"), ("EMP-1134", "employee ID"), ("EMP-1150", "employee ID"),
+    ],
+    "vendor_management.txt": [("₹2,00,000", "monetary amount")],
+    "payroll_schedule.txt": [("GC-FIN-2044", "employee ID")],
+    "board_meeting_minutes.txt": [("₹420 crore", "monetary amount")],
+    "whistleblower_register.txt": [("GC-SAL-3302", "employee ID, directly linked to a named person and an allegation")],
     "salary_bands.txt": [
         ("GC-HR-1042", "employee ID"),
         ("₹6,50,000", "monetary amount"), ("₹9,50,000", "monetary amount"),
@@ -115,7 +151,8 @@ RULES = [
 ]
 
 NOTES = [
-    "Corpus is 20 documents, not 21 - the 21st directory entry is classifications.json.",
+    "Corpus is 30 documents, not 31 - the 31st directory entry is classifications.json. Ten documents were added on 2026-10-22 (company_overview, holiday_calendar, workplace_safety, project_atlas_roadmap, vendor_management, payroll_schedule, workforce_restructuring_plan, board_meeting_minutes, security_audit_findings, whistleblower_register).",
+    "whistleblower_register.txt names the accused employee (Varun Chawla) next to employee ID GC-SAL-3302; as with GC-EMP-2187, the unredacted ID keeps the record re-identifiable.",
     "Priya Sharma appears in 3 documents with two different phone numbers (800-123-4567 in hr_salary_bands.txt, +91-98765-47210 in salary_bands.txt) and two employee-ID schemes. This is an inconsistency in the synthetic data, not a labelling decision; it does not affect per-occurrence scoring.",
     "Ananya Reddy appears with different job titles in disciplinary_procedure.txt ('HR Lead') and leave_policy.txt ('HR Operations Executive'). Same note as above.",
     "hr_salary_bands.txt and salary_bands.txt overlap heavily in content but carry different classifications (Internal vs Confidential). Retrieval may return either; the classification label is what matters for access-control scoring.",
@@ -174,7 +211,7 @@ def main():
             "document_count": len(documents),
             "entity_types": [P, E, T, "LOCATION", "CREDIT_CARD", "US_SSN", "IBAN_CODE"],
             "position_scheme": "occurrence_index: the nth exact occurrence of 'text' within the document. Character offsets are deliberately NOT used - the repo stores LF but Windows checkouts get CRLF, so offsets would not be portable.",
-            "method": "Labelled by direct reading of the source documents. No NER library was used to decide what counts as PII, so the key is independent of the tool it evaluates. LLM-drafted; spot-checked by a team member against 6 of the 20 source documents on 2026-10-16, no discrepancies found. The remaining 14 documents are unverified.",
+            "method": "Labelled by direct reading of the source documents. No NER library was used to decide what counts as PII, so the key is independent of the tool it evaluates. LLM-drafted, then verified by hand by a team member against all 30 source documents: 6 of the original 20 on 2026-10-16 and the remaining 24 on 2026-10-22. No discrepancies found.",
             "rules": RULES,
             "notes": NOTES,
             "totals": totals,

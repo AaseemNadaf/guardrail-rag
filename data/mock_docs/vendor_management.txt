@@ -1,0 +1,7 @@
+Vendor Management Policy
+
+All new vendors must be onboarded through the procurement portal and approved by the Procurement team before any purchase order is issued. Vendors that handle company data must sign a data-processing agreement and complete a security questionnaire.
+
+Purchases above ₹2,00,000 require three competitive quotations. Invoices are paid within 45 days of receipt, subject to approval by the requesting department.
+
+For vendor onboarding, contact Procurement Lead Nikhil Bansal (nikhil.bansal@guardrailcorp.com, 022-4567-8901).

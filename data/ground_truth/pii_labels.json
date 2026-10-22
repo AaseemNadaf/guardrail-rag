@@ -2,7 +2,7 @@
   "_meta": {
     "description": "Ground-truth PII labels for redaction evaluation (GuardRail RAG)",
     "corpus": "data/mock_docs",
-    "document_count": 20,
+    "document_count": 30,
     "entity_types": [
       "PERSON",
       "EMAIL_ADDRESS",
@@ -13,7 +13,7 @@
       "IBAN_CODE"
     ],
     "position_scheme": "occurrence_index: the nth exact occurrence of 'text' within the document. Character offsets are deliberately NOT used - the repo stores LF but Windows checkouts get CRLF, so offsets would not be portable.",
-    "method": "Labelled by direct reading of the source documents. No NER library was used to decide what counts as PII, so the key is independent of the tool it evaluates. LLM-drafted; spot-checked by a team member against 6 of the 20 source documents on 2026-10-16, no discrepancies found. The remaining 14 documents are unverified.",
+    "method": "Labelled by direct reading of the source documents. No NER library was used to decide what counts as PII, so the key is independent of the tool it evaluates. LLM-drafted, then verified by hand by a team member against all 30 source documents: 6 of the original 20 on 2026-10-16 and the remaining 24 on 2026-10-22. No discrepancies found.",
     "rules": [
       "PERSON covers the name only, never the job title ('Onboarding Coordinator Vikram Joshi' -> 'Vikram Joshi').",
       "EMAIL_ADDRESS includes role mailboxes (ethics@, it.support@, hr.ops@, security-incident@), not only personal ones.",
@@ -25,16 +25,17 @@
       "No LOCATION, CREDIT_CARD, US_SSN or IBAN_CODE instances exist in this corpus."
     ],
     "notes": [
-      "Corpus is 20 documents, not 21 - the 21st directory entry is classifications.json.",
+      "Corpus is 30 documents, not 31 - the 31st directory entry is classifications.json. Ten documents were added on 2026-10-22 (company_overview, holiday_calendar, workplace_safety, project_atlas_roadmap, vendor_management, payroll_schedule, workforce_restructuring_plan, board_meeting_minutes, security_audit_findings, whistleblower_register).",
+      "whistleblower_register.txt names the accused employee (Varun Chawla) next to employee ID GC-SAL-3302; as with GC-EMP-2187, the unredacted ID keeps the record re-identifiable.",
       "Priya Sharma appears in 3 documents with two different phone numbers (800-123-4567 in hr_salary_bands.txt, +91-98765-47210 in salary_bands.txt) and two employee-ID schemes. This is an inconsistency in the synthetic data, not a labelling decision; it does not affect per-occurrence scoring.",
       "Ananya Reddy appears with different job titles in disciplinary_procedure.txt ('HR Lead') and leave_policy.txt ('HR Operations Executive'). Same note as above.",
       "hr_salary_bands.txt and salary_bands.txt overlap heavily in content but carry different classifications (Internal vs Confidential). Retrieval may return either; the classification label is what matters for access-control scoring.",
       "disciplinary_procedure.txt links employee ID GC-EMP-2187 to a named person and a disciplinary outcome. If the name is redacted but the ID is not, the record remains re-identifiable - see out_of_scope entries."
     ],
     "totals": {
-      "EMAIL_ADDRESS": 22,
-      "PERSON": 18,
-      "PHONE_NUMBER": 8
+      "EMAIL_ADDRESS": 34,
+      "PERSON": 29,
+      "PHONE_NUMBER": 13
     }
   },
   "documents": {
@@ -72,6 +73,31 @@
         }
       ]
     },
+    "board_meeting_minutes.txt": {
+      "labels": [
+        {
+          "text": "Meghna Bose",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "meghna.bose@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-98330-71845",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "₹420 crore",
+          "reason": "monetary amount"
+        }
+      ]
+    },
     "code_of_conduct.txt": {
       "labels": [
         {
@@ -84,6 +110,16 @@
     },
     "communication_guidelines.txt": {
       "labels": [],
+      "out_of_scope": []
+    },
+    "company_overview.txt": {
+      "labels": [
+        {
+          "text": "info@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
       "out_of_scope": []
     },
     "data_classification_policy.txt": {
@@ -185,6 +221,16 @@
         },
         {
           "text": "sneha.kulkarni@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "holiday_calendar.txt": {
+      "labels": [
+        {
+          "text": "hr.ops@guardrailcorp.com",
           "type": "EMAIL_ADDRESS",
           "occurrence_index": 0
         }
@@ -361,6 +407,31 @@
       "labels": [],
       "out_of_scope": []
     },
+    "payroll_schedule.txt": {
+      "labels": [
+        {
+          "text": "Divya Pillai",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "divya.pillai@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-98220-55671",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "GC-FIN-2044",
+          "reason": "employee ID"
+        }
+      ]
+    },
     "performance_review.txt": {
       "labels": [
         {
@@ -377,6 +448,54 @@
       "out_of_scope": [
         {
           "text": "GC-HR-1098",
+          "reason": "employee ID"
+        }
+      ]
+    },
+    "project_atlas_roadmap.txt": {
+      "labels": [
+        {
+          "text": "Aditya Rao",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "aditya.rao@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Pooja Deshmukh",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "pooja.deshmukh@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Farhan Shaikh",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "farhan.shaikh@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "EMP-1121",
+          "reason": "employee ID"
+        },
+        {
+          "text": "EMP-1134",
+          "reason": "employee ID"
+        },
+        {
+          "text": "EMP-1150",
           "reason": "employee ID"
         }
       ]
@@ -476,6 +595,111 @@
           "reason": "monetary amount"
         }
       ]
+    },
+    "security_audit_findings.txt": {
+      "labels": [
+        {
+          "text": "Siddharth Rane",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "siddharth.rane@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-97300-44127",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "vendor_management.txt": {
+      "labels": [
+        {
+          "text": "Nikhil Bansal",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "nikhil.bansal@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "022-4567-8901",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "₹2,00,000",
+          "reason": "monetary amount"
+        }
+      ]
+    },
+    "whistleblower_register.txt": {
+      "labels": [
+        {
+          "text": "Varun Chawla",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "Tanvi Gokhale",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "tanvi.gokhale@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": [
+        {
+          "text": "GC-SAL-3302",
+          "reason": "employee ID, directly linked to a named person and an allegation"
+        }
+      ]
+    },
+    "workforce_restructuring_plan.txt": {
+      "labels": [
+        {
+          "text": "Rahul Khanna",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "rahul.khanna@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
+    },
+    "workplace_safety.txt": {
+      "labels": [
+        {
+          "text": "Kavya Menon",
+          "type": "PERSON",
+          "occurrence_index": 0
+        },
+        {
+          "text": "kavya.menon@guardrailcorp.com",
+          "type": "EMAIL_ADDRESS",
+          "occurrence_index": 0
+        },
+        {
+          "text": "+91-90110-22334",
+          "type": "PHONE_NUMBER",
+          "occurrence_index": 0
+        }
+      ],
+      "out_of_scope": []
     }
   }
 }
